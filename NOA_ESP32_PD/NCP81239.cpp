@@ -101,56 +101,69 @@ StructNCP81239RegisterMap g_stPMICData[CONFIG_NCP_PM_PORT_COUNT];
 
 int     ncp81239_pmic_init(int port) {
   g_stPMICData[port] = g_stPmicInitialData;
+  int cc1 = 0, cc2 = 0;
+  tcpm_get_cc(port, &cc1, &cc2);
+  DBGLOG(Info, "Port %d CC1 %d CC2 %d", port, cc1, cc2);
 
-/*  DBGLOG(Info, "INIT:En pol %d", g_stPMICData.b1CR00EnPol);
-  DBGLOG(Info, "INITc:En pup %d", g_stPMICData.b1CR00EnPup);
-  DBGLOG(Info, "INIT:En mask %d", g_stPMICData.b1CR00EnMask);
-  DBGLOG(Info, "INIT:En int %d", g_stPMICData.b1CR00EnInternal);
-  DBGLOG(Info, "INIT:DAC targer %d", g_stPMICData.ucCR01DacTarget);
-  DBGLOG(Info, "INIT:Slew rate %d", g_stPMICData.b2CR02SlewRate);
-  DBGLOG(Info, "INIT:PWM Freq %d", g_stPMICData.b3CR03PwmFreq);
-  DBGLOG(Info, "INIT:DAC lsb %d", g_stPMICData.b1CR03DacLsb);
-  DBGLOG(Info, "INIT:Pfet %d", g_stPMICData.b1CR04Pfet);
-  DBGLOG(Info, "INIT:Cfet %d", g_stPMICData.b1CR04Cfet);
-  DBGLOG(Info, "INIT:Dead battery en %d", g_stPMICData.b1CR04DeadBatteryEn);
-  DBGLOG(Info, "INIT:Cs1 dchrg %d", g_stPMICData.b1CR04Cs1DisCharge);
-  DBGLOG(Info, "INIT:Cs2 dchrg %d", g_stPMICData.b1CR04Cs2DisCharge);
+  if (port == 2) {
+    if (cc1 == 2 || cc2 == 2) {
+      g_stPMICData[port].b1CR00EnPol = 0x00;
+      g_stPMICData[port].b1CR00EnPup = 0x01;  // en_pup=1, en_pol=0: A high on the enable pin generated a turn on the pull up current ensure the parts starts immediately
+      g_stPMICData[port].b1CR00EnMask = 0x01; // en_mask=1, en_int=1: turn on part
+      g_stPMICData[port].b1CR00EnInternal = 0x01;
+      DBGLOG(Info, "Warning! Init Port %d VBus to %dV", port, 0x96/10);
+      g_stPMICData[port].ucCR01DacTarget = 0x96;  // set port2 default voltage to 15V, not save for device
+    }
+  }
+/*  DBGLOG(Info, "INIT:En pol %d", g_stPMICData[port].b1CR00EnPol);
+  DBGLOG(Info, "INITc:En pup %d", g_stPMICData[port].b1CR00EnPup);
+  DBGLOG(Info, "INIT:En mask %d", g_stPMICData[port].b1CR00EnMask);
+  DBGLOG(Info, "INIT:En int %d", g_stPMICData[port].b1CR00EnInternal);
+  DBGLOG(Info, "INIT:DAC targer %d", g_stPMICData[port].ucCR01DacTarget);
+  DBGLOG(Info, "INIT:Slew rate %d", g_stPMICData[port].b2CR02SlewRate);
+  DBGLOG(Info, "INIT:PWM Freq %d", g_stPMICData[port].b3CR03PwmFreq);
+  DBGLOG(Info, "INIT:DAC lsb %d", g_stPMICData[port].b1CR03DacLsb);
+  DBGLOG(Info, "INIT:Pfet %d", g_stPMICData[port].b1CR04Pfet);
+  DBGLOG(Info, "INIT:Cfet %d", g_stPMICData[port].b1CR04Cfet);
+  DBGLOG(Info, "INIT:Dead battery en %d", g_stPMICData[port].b1CR04DeadBatteryEn);
+  DBGLOG(Info, "INIT:Cs1 dchrg %d", g_stPMICData[port].b1CR04Cs1DisCharge);
+  DBGLOG(Info, "INIT:Cs2 dchrg %d", g_stPMICData[port].b1CR04Cs2DisCharge);
   
-  DBGLOG(Info, "INIT:Ocp clim pos %d", g_stPMICData.b2CR05OcpClimPos);
-  DBGLOG(Info, "INIT:Ocp clim neg %d", g_stPMICData.b2CR05OcpClimNeg);
-  DBGLOG(Info, "INIT:Cs1 clim pos %d", g_stPMICData.b2CR06Cs1Clind);
-  DBGLOG(Info, "INIT:Cs2 clim pos %d", g_stPMICData.b2CR06Cs2Clind);
-  DBGLOG(Info, "INIT:Lo gm amp set %d", g_stPMICData.b3CR07LoGmAmpSetting);
-  DBGLOG(Info, "INIT:Gm manual %d", g_stPMICData.b1CR07GmManual);
-  DBGLOG(Info, "INIT:Hi gm amp set %d", g_stPMICData.b3CR07HiGmAmpSetting);
-  DBGLOG(Info, "INIT:Gm amp config %d", g_stPMICData.b1CR07GmAmpConfig);
-  DBGLOG(Info, "INIT:Amux trigger %d", g_stPMICData.b2CR08AmuxTrigger);
-  DBGLOG(Info, "INIT:Amux sel %d", g_stPMICData.b3CR08AmuxSel);
-  DBGLOG(Info, "INIT:Dis adc %d", g_stPMICData.b1CR08DisAdc);
-  DBGLOG(Info, "INIT:Int mask clind %d", g_stPMICData.b1CR09IntMaskCsClind);
-  DBGLOG(Info, "INIT:Int mask ov %d", g_stPMICData.b1CR09IntMaskOv);
+  DBGLOG(Info, "INIT:Ocp clim pos %d", g_stPMICData[port].b2CR05OcpClimPos);
+  DBGLOG(Info, "INIT:Ocp clim neg %d", g_stPMICData[port].b2CR05OcpClimNeg);
+  DBGLOG(Info, "INIT:Cs1 clim pos %d", g_stPMICData[port].b2CR06Cs1Clind);
+  DBGLOG(Info, "INIT:Cs2 clim pos %d", g_stPMICData[port].b2CR06Cs2Clind);
+  DBGLOG(Info, "INIT:Lo gm amp set %d", g_stPMICData[port].b3CR07LoGmAmpSetting);
+  DBGLOG(Info, "INIT:Gm manual %d", g_stPMICData[port].b1CR07GmManual);
+  DBGLOG(Info, "INIT:Hi gm amp set %d", g_stPMICData[port].b3CR07HiGmAmpSetting);
+  DBGLOG(Info, "INIT:Gm amp config %d", g_stPMICData[port].b1CR07GmAmpConfig);
+  DBGLOG(Info, "INIT:Amux trigger %d", g_stPMICData[port].b2CR08AmuxTrigger);
+  DBGLOG(Info, "INIT:Amux sel %d", g_stPMICData[port].b3CR08AmuxSel);
+  DBGLOG(Info, "INIT:Dis adc %d", g_stPMICData[port].b1CR08DisAdc);
+  DBGLOG(Info, "INIT:Int mask clind %d", g_stPMICData[port].b1CR09IntMaskCsClind);
+  DBGLOG(Info, "INIT:Int mask ov %d", g_stPMICData[port].b1CR09IntMaskOv);
 
-  DBGLOG(Info, "INIT:Int mask ov %d", g_stPMICData.b1CR09IntMaskOv);
-  DBGLOG(Info, "INIT:Int mask ocp p %d", g_stPMICData.b1CR09IntMaskOcpP);
-  DBGLOG(Info, "INIT:Int mask pg %d", g_stPMICData.b1CR09IntMaskPg);
-  DBGLOG(Info, "INIT:Int mask tsd %d", g_stPMICData.b1CR09IntMaskTsd);
-  DBGLOG(Info, "INIT:Int mask uv %d", g_stPMICData.b1CR09IntMaskUv);
-  DBGLOG(Info, "INIT:Int mask vchn %d", g_stPMICData.b1CR09IntMaskVchn);
-  DBGLOG(Info, "INIT:Int mask i2c ack %d", g_stPMICData.b1CR09IntMaskI2cAck);
-  DBGLOG(Info, "INIT:Int mask shutdown %d", g_stPMICData.b1CR0AIntMaskShutDown);
+  DBGLOG(Info, "INIT:Int mask ov %d", g_stPMICData[port].b1CR09IntMaskOv);
+  DBGLOG(Info, "INIT:Int mask ocp p %d", g_stPMICData[port].b1CR09IntMaskOcpP);
+  DBGLOG(Info, "INIT:Int mask pg %d", g_stPMICData[port].b1CR09IntMaskPg);
+  DBGLOG(Info, "INIT:Int mask tsd %d", g_stPMICData[port].b1CR09IntMaskTsd);
+  DBGLOG(Info, "INIT:Int mask uv %d", g_stPMICData[port].b1CR09IntMaskUv);
+  DBGLOG(Info, "INIT:Int mask vchn %d", g_stPMICData[port].b1CR09IntMaskVchn);
+  DBGLOG(Info, "INIT:Int mask i2c ack %d", g_stPMICData[port].b1CR09IntMaskI2cAck);
+  DBGLOG(Info, "INIT:Int mask shutdown %d", g_stPMICData[port].b1CR0AIntMaskShutDown);
   
-  DBGLOG(Info, "INIT:VFB Value %d", g_stPMICData.ucCR10VfbValue);
-  DBGLOG(Info, "INITc:Vin Value %d", g_stPMICData.ucCR11VinValue);
-  DBGLOG(Info, "INIT:CS2 Value %d", g_stPMICData.ucCR12Cs2Value);
-  DBGLOG(Info, "INIT:CS1 Value %d", g_stPMICData.ucCR13Cs1Value);
-  DBGLOG(Info, "INIT:Cs Clind Flag %d", g_stPMICData.b1CR14IntCsClindFlag);
-  DBGLOG(Info, "INIT:VBUS OVP Flag %d", g_stPMICData.b1CR14IntOvpFlag);
-  DBGLOG(Info, "INIT:OCP_P Flag %d", g_stPMICData.b1CR14IntOcpPFlag);
-  DBGLOG(Info, "INIT:Power Good Flag %d", g_stPMICData.b1CR14IntPgIntFlag);
-  DBGLOG(Info, "INIT:Thermal Sensor Flag %d", g_stPMICData.b1CR14IntTsdFlag);
-  DBGLOG(Info, "INIT:Vchn Flag %d", g_stPMICData.b1CR14IntVchnFlag);
-  DBGLOG(Info, "INIT:IIC ACK Flag %d", g_stPMICData.b1CR14IntI2cAckFlag);
-  DBGLOG(Info, "INIT:Shut Down Flag %d", g_stPMICData.b1CR15IntShutDownFlag); */
+  DBGLOG(Info, "INIT:VFB Value %d", g_stPMICData[port].ucCR10VfbValue);
+  DBGLOG(Info, "INITc:Vin Value %d", g_stPMICData[port].ucCR11VinValue);
+  DBGLOG(Info, "INIT:CS2 Value %d", g_stPMICData[port].ucCR12Cs2Value);
+  DBGLOG(Info, "INIT:CS1 Value %d", g_stPMICData[port].ucCR13Cs1Value);
+  DBGLOG(Info, "INIT:Cs Clind Flag %d", g_stPMICData[port].b1CR14IntCsClindFlag);
+  DBGLOG(Info, "INIT:VBUS OVP Flag %d", g_stPMICData[port].b1CR14IntOvpFlag);
+  DBGLOG(Info, "INIT:OCP_P Flag %d", g_stPMICData[port].b1CR14IntOcpPFlag);
+  DBGLOG(Info, "INIT:Power Good Flag %d", g_stPMICData[port].b1CR14IntPgIntFlag);
+  DBGLOG(Info, "INIT:Thermal Sensor Flag %d", g_stPMICData[port].b1CR14IntTsdFlag);
+  DBGLOG(Info, "INIT:Vchn Flag %d", g_stPMICData[port].b1CR14IntVchnFlag);
+  DBGLOG(Info, "INIT:IIC ACK Flag %d", g_stPMICData[port].b1CR14IntI2cAckFlag);
+  DBGLOG(Info, "INIT:Shut Down Flag %d", g_stPMICData[port].b1CR15IntShutDownFlag); */
   return 0;
 }
 
@@ -257,7 +270,15 @@ int ncp81239_pmic_set_voltage(int port) {
       NOA_PUB_I2C_SendBytes(1, ncp81239_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG01, (uint8_t *)(&g_stPMICData[port]) + _NCP81239_CTRL_REG01, 1); 
       break;
     case 2:
-      NOA_PUB_I2C_SendBytes(0, ncp81239_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG01, (uint8_t *)(&g_stPMICData[port]) + _NCP81239_CTRL_REG01, 1); 
+      if (g_stPMICData[port].ucCR01DacTarget == 0x96) {
+        g_stPMICData[port].b1CR00EnPol = 0x00;
+        g_stPMICData[port].b1CR00EnPup = 0x01;  // en_pup=1, en_pol=0: A high on the enable pin generated a turn on the pull up current ensure the parts starts immediately
+        g_stPMICData[port].b1CR00EnMask = 0x01; // en_mask=1, en_int=1: turn on part
+        g_stPMICData[port].b1CR00EnInternal = 0x01;
+        DBGLOG(Info, "Warning! Port %d VBus is up to %dV", port, 0x96/10);
+        NOA_PUB_I2C_SendBytes(0, ncp81239_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG00, (uint8_t *)(&g_stPMICData[port]), 1);
+      }
+      NOA_PUB_I2C_SendBytes(0, ncp81239_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG01, (uint8_t *)(&g_stPMICData[port]) + _NCP81239_CTRL_REG01, 1);
       break;
     case 3:
       NOA_PUB_I2C_SendBytes(1, ncp81239A_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG01, (uint8_t *)(&g_stPMICData[port]) + _NCP81239_CTRL_REG01, 1);
@@ -265,7 +286,6 @@ int ncp81239_pmic_set_voltage(int port) {
   }
 //  NOA_PUB_I2C_SendBytes(1, ncp81239_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG01, (uint8_t *)(&g_stPMICData[port].ucCR01DacTarget), 1);
 //  NOA_PUB_I2C_SetReg(1, ncp81239_I2C_SLAVE_ADDR, _NCP81239_CTRL_REG01, g_stPMICData[port].ucCR01DacTarget);
-  
   return ucResult;
 }
 
@@ -274,14 +294,32 @@ int ncp81239_pmic_reset(int port) {
   if(port < 1 || port > 3) {  // support 1 - 3 port only
     return -1;
   }
-//  g_stPMICData[port].b1CR00EnPol = g_stPmicInitialData.b1CR00EnPol;
-//  g_stPMICData[port].b1CR00EnPup = g_stPmicInitialData.b1CR00EnPup;
-//  g_stPMICData[port].b1CR00EnMask = g_stPmicInitialData.b1CR00EnMask;
-//  g_stPMICData[port].b1CR00EnInternal = g_stPmicInitialData.b1CR00EnInternal;
+  g_stPMICData[port].b1CR00EnPol = g_stPmicInitialData.b1CR00EnPol;
+  g_stPMICData[port].b1CR00EnPup = g_stPmicInitialData.b1CR00EnPup;
+  g_stPMICData[port].b1CR00EnMask = g_stPmicInitialData.b1CR00EnMask;
+  g_stPMICData[port].b1CR00EnInternal = g_stPmicInitialData.b1CR00EnInternal;
 //  g_stPMICData[port].b4CR00Reserved = g_stPmicInitialData.b4CR00Reserved;
-  
-  g_stPMICData[port].ucCR01DacTarget = g_stPmicInitialData.ucCR01DacTarget;
-  
+
+  int cc1 = 0, cc2 = 0;
+  tcpm_get_cc(port, &cc1, &cc2);
+//  DBGLOG(Info, "Port %d CC1 %d CC2 %d", port, cc1, cc2);
+
+  if (port == 2) {
+    DBGLOG(Info, "Port %d CC1 %d CC2 %d", port, cc1, cc2);
+    if ((cc1 == 2 || cc2 == 2) && g_stPMICData[port].ucCR01DacTarget == 0x96) {
+      g_stPMICData[port].b1CR00EnPol = 0x00;
+      g_stPMICData[port].b1CR00EnPup = 0x01;  // en_pup=1, en_pol=0: A high on the enable pin generated a turn on the pull up current ensure the parts starts immediately
+      g_stPMICData[port].b1CR00EnMask = 0x01; // en_mask=1, en_int=1: turn on part
+      g_stPMICData[port].b1CR00EnInternal = 0x01;
+      DBGLOG(Info, "Warning! Keep Port %d VBus to %dV", port, 0x96/10);
+      g_stPMICData[port].ucCR01DacTarget = 0x96;  // set port2 default voltage to 15V, not save for device
+    } else {
+      g_stPMICData[port].ucCR01DacTarget = g_stPmicInitialData.ucCR01DacTarget;
+    }
+  } else {
+    g_stPMICData[port].ucCR01DacTarget = g_stPmicInitialData.ucCR01DacTarget;
+  }
+
 //  g_stPMICData[port].b2CR02SlewRate =  g_stPmicInitialData.b2CR02SlewRate;
 //  g_stPMICData[port].b6CR02Reserved = g_stPmicInitialData.b6CR02Reserved;
   

@@ -13,6 +13,16 @@
 
 #include "NOA_public.h"
 
+#ifdef NOA_PD_SNACKER
+extern int const usb_pd_snk_sel_pin;
+extern int usb_pd_src1_sel_pin;
+#else
+extern int const usb_pd_snk_sel_pin;
+extern int usb_pd_src1_sel_pin;
+extern int usb_pd_src2_sel_pin;
+extern int usb_pd_src3_sel_pin;
+#endif
+
 #define PACKET_IS_GOOD_CRC(head) (PD_HEADER_TYPE(head) == PD_CTRL_GOOD_CRC && PD_HEADER_CNT(head) == 0)
 
 static struct fusb302_chip_state {
@@ -97,10 +107,11 @@ static int fusb302_convert_bc_lvl(int port, int bc_lvl)
 
 static int fusb302_measure_cc_pin_source(int port, int cc_measure)
 {
-	int switches0_reg;
-	int reg;
-	int cc_lvl;
-	
+	int switches0_reg = 0;
+	int reg = 0;
+	int cc_lvl = 0;
+//  int measure_val = 0;
+
 	/* Read status register */
 	tcpc_read(port, TCPC_REG_SWITCHES0, &reg);
 	/* Save current value */
@@ -108,10 +119,11 @@ static int fusb302_measure_cc_pin_source(int port, int cc_measure)
 	/* Clear pull-up register settings and measure bits */
 	reg &= ~(TCPC_REG_SWITCHES0_MEAS_CC1 | TCPC_REG_SWITCHES0_MEAS_CC2);
 	/* Set desired pullup register bit */
-	if (cc_measure == TCPC_REG_SWITCHES0_MEAS_CC1)
+	if (cc_measure == TCPC_REG_SWITCHES0_MEAS_CC1) {
 		reg |= TCPC_REG_SWITCHES0_CC1_PU_EN;
-	else
+	} else {
 		reg |= TCPC_REG_SWITCHES0_CC2_PU_EN;
+	}
 	/* Set CC measure bit */
 	reg |= cc_measure;
 
@@ -141,8 +153,7 @@ static int fusb302_measure_cc_pin_source(int port, int cc_measure)
 		/* Read status register */
 		tcpc_read(port, TCPC_REG_STATUS0, &reg);
 
-		cc_lvl = (reg & TCPC_REG_STATUS0_COMP) ? TYPEC_CC_VOLT_RD
-						       : TYPEC_CC_VOLT_RA;
+		cc_lvl = (reg & TCPC_REG_STATUS0_COMP) ? TYPEC_CC_VOLT_RD : TYPEC_CC_VOLT_RA;
 	}
 
 	/* Restore SWITCHES0 register to its value prior */
@@ -380,10 +391,14 @@ static int fusb302_tcpm_init(int port)
   state[port].rx_enable = -1;
 
 	/* set the voltage threshold for no connect detection (vOpen) */
-	state[port].mdac_vnc = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_DEF_VNC_MV);
+// 	state[port].mdac_vnc = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_DEF_VNC_MV);
+//  state[port].mdac_vnc = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_1_5_VNC_MV);
+  state[port].mdac_vnc = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_3_0_VNC_MV);
 	/* set the voltage threshold for Rd vs Ra detection */
-	state[port].mdac_rd = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_DEF_RD_THRESH_MV);
-
+// 	state[port].mdac_rd = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_DEF_RD_THRESH_MV);
+//  state[port].mdac_rd = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_1_5_RD_THRESH_MV);
+  state[port].mdac_rd = TCPC_REG_MEASURE_MDAC_MV(PD_SRC_3_0_RD_THRESH_MV);
+  
 	/* all other variables assumed to default to 0 */
 	
 	/* Restore default settings */
@@ -392,8 +407,7 @@ static int fusb302_tcpm_init(int port)
 	/* Turn on retries and set number of retries */
 	tcpc_read(port, TCPC_REG_CONTROL3, &reg);
 	reg |= TCPC_REG_CONTROL3_AUTO_RETRY;
-	reg |= (PD_RETRY_COUNT & 0x3) <<
-		TCPC_REG_CONTROL3_N_RETRIES_POS;
+	reg |= (PD_RETRY_COUNT & 0x3) << TCPC_REG_CONTROL3_N_RETRIES_POS;
 	tcpc_write(port, TCPC_REG_CONTROL3, reg);
 
 	/* Create interrupt masks */
@@ -406,7 +420,9 @@ static int fusb302_tcpm_init(int port)
 	reg &= ~TCPC_REG_MASK_ALERT;
 	/* packet received with correct CRC */
 	reg &= ~TCPC_REG_MASK_CRC_CHK;
-	tcpc_write(port, TCPC_REG_MASK, reg);
+  /* vbus */
+//    reg &= ~TCPC_REG_MASK_VBUSOK;
+    tcpc_write(port, TCPC_REG_MASK, reg);
 
 	reg = 0xFF;
 	/* when all pd message retries fail... */
@@ -463,16 +479,21 @@ static int fusb302_tcpm_get_cc(int port, int *cc1, int *cc2)
 
 static int fusb302_tcpm_set_cc(int port, int pull)
 {
-	int reg;
+	int reg = 0;
 	
 	/* NOTE: FUSB302 toggles a single pull-up between CC1 and CC2 */
 	/* NOTE: FUSB302 Does not support Ra. */
-//  DBGLOG(Debug, "Port %d vconn %d", port, state[port].vconn_enabled);
-  DBGLOG(Debug, "Port %d cc_polarity %d", port, state[port].cc_polarity);
-  DBGLOG(Debug, "Port %d pulling_up %d pull %d", port, state[port].pulling_up, pull);
+//  DBGLOG(Debug, "Port %d vconn %d cc_polarity %d pulling_up %d pull %d", port, state[port].vconn_enabled, state[port].cc_polarity, state[port].pulling_up, pull);
+//  DBGLOG(Debug, "Port %d cc_polarity %d", port, state[port].cc_polarity);
+//  DBGLOG(Debug, "Port %d pulling_up %d pull %d", port, state[port].pulling_up, pull);
 //  DBGLOG(Debug, "Port %d rx_enable %d", port, state[port].rx_enable);
 	switch (pull) {
 	case TYPEC_CC_RP:
+    /* turn off toggle */
+    tcpc_read(port, TCPC_REG_CONTROL2, &reg);
+    reg &= ~TCPC_REG_CONTROL2_TOGGLE;
+    tcpc_write(port, TCPC_REG_CONTROL2, reg);
+
 		/* enable the pull-up we know to be necessary */
 		tcpc_read(port, TCPC_REG_SWITCHES0, &reg);
 
@@ -483,13 +504,10 @@ static int fusb302_tcpm_set_cc(int port, int pull)
 			 TCPC_REG_SWITCHES0_VCONN_CC1 |
 			 TCPC_REG_SWITCHES0_VCONN_CC2);
 
-		reg |= TCPC_REG_SWITCHES0_CC1_PU_EN |
-			TCPC_REG_SWITCHES0_CC2_PU_EN;
+		reg |= TCPC_REG_SWITCHES0_CC1_PU_EN | TCPC_REG_SWITCHES0_CC2_PU_EN;
 
 		if (state[port].vconn_enabled)
-			reg |= state[port].cc_polarity ?
-			       TCPC_REG_SWITCHES0_VCONN_CC1 :
-			       TCPC_REG_SWITCHES0_VCONN_CC2;
+			reg |= state[port].cc_polarity ? TCPC_REG_SWITCHES0_VCONN_CC1 : TCPC_REG_SWITCHES0_VCONN_CC2;
 
 		tcpc_write(port, TCPC_REG_SWITCHES0, reg);
 
@@ -544,7 +562,7 @@ static int fusb302_tcpm_set_polarity(int port, int polarity)
 	int reg = 0;
 
 //  DBGLOG(Debug, "Port %d vconn %d", port, state[port].vconn_enabled);
-  DBGLOG(Debug, "Port %d cc_polarity %d polarity %d", port, state[port].cc_polarity, polarity);
+  DBGLOG(Debug, "Port %d cc_polarity %d polarity %d snk_sel_pin %d", port, state[port].cc_polarity, polarity, usb_pd_snk_sel_pin);
 //  DBGLOG(Debug, "Port %d pulling_up %d", port, state[port].pulling_up);
 //  DBGLOG(Debug, "Port %d rx_enable %d", port, state[port].rx_enable);
 
@@ -590,7 +608,56 @@ static int fusb302_tcpm_set_polarity(int port, int polarity)
 
 	/* Save the polarity for later */
 	state[port].cc_polarity = polarity;
-	
+
+#ifdef NOA_PD_SNACKER
+  switch (port) {
+    case 0:
+      if (polarity == 0) {  // unflipped
+        digitalWrite(usb_pd_snk_sel_pin, HIGH);
+      } else {  // flipped
+        digitalWrite(usb_pd_snk_sel_pin, LOW);
+      }
+      break;
+    case 1:
+      if (polarity == 0) {  // unflipped
+        digitalWrite(usb_pd_src1_sel_pin, HIGH);
+      } else {  // flipped
+        digitalWrite(usb_pd_src1_sel_pin, LOW);
+      }
+      break;
+  }
+#else
+  switch (port) {
+    case 0:
+      if (polarity == 0) {  // unflipped
+        digitalWrite(usb_pd_snk_sel_pin, HIGH);
+      } else {  // flipped
+        digitalWrite(usb_pd_snk_sel_pin, LOW);
+      }
+      break;
+    case 1:
+      if (polarity == 0) {
+        digitalWrite(usb_pd_src1_sel_pin, HIGH);
+      } else {
+        digitalWrite(usb_pd_src1_sel_pin, LOW);
+      }
+      break;
+    case 2:
+      if (polarity == 0) {
+        digitalWrite(usb_pd_src2_sel_pin, HIGH);
+      } else {
+        digitalWrite(usb_pd_src2_sel_pin, LOW);
+      }
+      break;
+    case 3:
+      if (polarity == 0) {
+        digitalWrite(usb_pd_src3_sel_pin, HIGH);
+      } else {
+        digitalWrite(usb_pd_src3_sel_pin, LOW);
+      }
+      break;
+  }
+#endif
 	return 0;
 }
 
@@ -657,7 +724,7 @@ static int fusb302_tcpm_set_rx_enable(int port, int enable)
 //  DBGLOG(Debug, "Port %d vconn %d", port, state[port].vconn_enabled);
 //  DBGLOG(Debug, "Port %d cc_polarity %d", port, state[port].cc_polarity);
 //  DBGLOG(Debug, "Port %d pulling_up %d", port, state[port].pulling_up);
-  DBGLOG(Debug, "Port %d rx_enable %d enable %d", port, state[port].rx_enable, enable);
+//  DBGLOG(Debug, "Port %d rx_enable %d enable %d cc_polarity %d vconn_enabled %d", port, state[port].rx_enable, enable, state[port].cc_polarity, state[port].vconn_enabled);
 
 	state[port].rx_enable = enable;
 	
@@ -851,8 +918,8 @@ static int fusb302_tcpm_transmit(int port, enum tcpm_transmit_type type,
 		fusb302_tcpm_send_message(port, header, data, buf, buf_pos);
 	    // wait for the GoodCRC to come back before we let the rest
 	    // of the code do stuff like change polarity and miss it
-	    delayMicroseconds(1200);
-//      delayMicroseconds(600); // mike 20211018
+//	    delayMicroseconds(1200);   // mike 20211118
+      delayMicroseconds(600);
 	    return 0;
 	case TCPC_TX_HARD_RESET:
 		/* Simply hit the SEND_HARD_RESET bit */
@@ -889,10 +956,11 @@ static int fusb302_tcpm_transmit(int port, enum tcpm_transmit_type type,
 #ifdef CONFIG_USB_PD_VBUS_DETECT_TCPC
 static int fusb302_tcpm_get_vbus_level(int port)
 {
-	int reg;
+	int reg = 0;
 
 	/* Read status register */
 	tcpc_read(port, TCPC_REG_STATUS0, &reg);
+  DBGLOG(Info, "p%d TCPC_REG_STATUS0 %d ", port, reg);
 
 	return (reg & TCPC_REG_STATUS0_VBUSOK) ? 1 : 0;
 }
@@ -918,7 +986,7 @@ void fusb302_tcpc_alert(int port)
     }
   } else {
     if (interrupt > 0 || interrupta > 0 || interruptb > 0) {
-      DBGLOG(Info, "p%d interrupt %d interrupta %d interruptb %d", port, interrupt, interrupta, interruptb);
+//      DBGLOG(Info, "p%d interrupt %d interrupta %d interruptb %d", port, interrupt, interrupta, interruptb);
     } 
   }
 
@@ -960,11 +1028,11 @@ void fusb302_tcpc_alert(int port)
     if (interrupta & TCPC_REG_INTERRUPTA_HARDRESET) {
       /* hard reset has been received */
       /* bring FUSB302 out of reset */
-      if (port == 0) {    // unreset when PD is source, debug
+//      if (port == 0) {    // unreset when PD is source, debug
         fusb302_pd_reset(port);
         pd_execute_hard_reset(port);
         // task_wake(PD_PORT_TO_TASK_ID(port));
-      }
+//      }
     }
 
     if (interruptb & TCPC_REG_INTERRUPTB_GCRCSENT) {
@@ -994,25 +1062,7 @@ void fusb302_tcpm_set_bist_test_data(int port)
 	tcpc_write(port, TCPC_REG_CONTROL3, reg);
 }
 
-const struct tcpm_drv fusb302_tcpm_drv_SNK = {
-  .init     = &fusb302_tcpm_init,
-  .release    = &fusb302_tcpm_release,
-  .get_cc     = &fusb302_tcpm_get_cc,
-#ifdef CONFIG_USB_PD_VBUS_DETECT_TCPC
-  .get_vbus_level   = &fusb302_tcpm_get_vbus_level,
-#endif
-  .select_rp_value  = &fusb302_tcpm_select_rp_value,
-  .set_cc     = &fusb302_tcpm_set_cc,
-  .set_polarity   = &fusb302_tcpm_set_polarity,
-  .set_vconn    = &fusb302_tcpm_set_vconn,
-  .set_msg_header   = &fusb302_tcpm_set_msg_header,
-  .set_rx_enable    = &fusb302_tcpm_set_rx_enable,
-  .get_message    = &fusb302_tcpm_get_message,
-  .transmit   = &fusb302_tcpm_transmit,
-  .tcpc_alert   = &fusb302_tcpc_alert,
-};
-
-const struct tcpm_drv fusb302_tcpm_drv_SRC = {
+const struct tcpm_drv fusb302_tcpm_drv = {
   .init     = &fusb302_tcpm_init,
   .release    = &fusb302_tcpm_release,
   .get_cc     = &fusb302_tcpm_get_cc,
