@@ -9,20 +9,17 @@
 #include "src\LIB\PUB\NOA_TimeDefs.h"
 #include "src\LIB\PUB\NOA_public.h"
 
-#ifdef NOA_PD_SNACKER
-#define NOA_ESP32_PD_VERSION "0.0.1.0"
-#else
-#define NOA_ESP32_PD_VERSION "0.1.1.0"
-#endif
-
 extern int const usb_pd_snk_sel_pin;
 
 #ifdef NOA_PD_SNACKER
+#include "src\LIB\PUB\NOA_syspara.h"
 #include "src\DRV\NFC\Adafruit_OM9663.h"
 #include "src\DRV\NFC\NOA_NFC.h"
 #include "src\APP\NOA_App.h"
 #include "src\NET\NOA_Net.h"
 #include "src\UI\NEOPixel.h"
+
+// #include "src\WEB\NOA_WebServer.h"
 
 const int usb_pd_snk_int_pin = 32;    // init pin for PD snk
 const int usb_pd_snk_sel_pin = 33;    // sel pin for PD snk
@@ -33,13 +30,14 @@ int usb_pd_src1_sel_pin = 14;         // sel pin for PD src
 const int ncp_bb_con1_int_pin = 25;   // init pin for ncp81239
 int ncp_bb_con1_en_pin = 12;          // enable pin for ncp81239
 
-// const int ncp_bb_con9v_int_pin = 35;   // init pin for ncp81239 9V(Wireles Charger)
-// int ncp_bb_con9v_en_pin = 13;          // enable pin for ncp81239 9V(Wireles Charger)
-// extern int const ncp_bb_con9v_tempadc_pin;
-// const int ncp_bb_con9v_tempadc_pin = 15;   // Wireless Charger Coil Temperrature ADC Input
-// ESP32AnalogRead ncp_bb_con9v_tempadc;
-// const int ncp_bb_con9v_led_pin = 18;       // Wireless Charger Status Indication
+const int ncp_bb_con9v_int_pin = 35;   // init pin for ncp81239 9V(Wireles Charger)
+int ncp_bb_con9v_en_pin = 13;          // enable pin for ncp81239 9V(Wireles Charger)
+extern int const ncp_bb_con9v_tempadc_pin;
+const int ncp_bb_con9v_tempadc_pin = 15;   // Wireless Charger Coil Temperrature ADC Input
+ESP32AnalogRead ncp_bb_con9v_tempadc;
+const int ncp_bb_con9v_led_pin = 18;       // Wireless Charger Status Indication
 
+int wireless_charger_port_ready = 0;
 // USB-C Specific - TCPM start 1
 const struct tcpc_config_t tcpc_config[CONFIG_USB_PD_PORT_COUNT] = {
   {0, fusb302_I2C_SLAVE_ADDR, &fusb302_tcpm_drv}, // SNK
@@ -100,10 +98,15 @@ const uint8_t P3M_ADDR = 0x75;
 
 int pd_source_cap_current_index = 0, pd_source_cap_max_index = 0;
 static int pd_sink_port_ready = 0;
-static int pd_sink_port_default_valtage = 0;
 static int pd_source_port_ready = 0;
+int pd_sink_port_default_valtage = 0;
+int pd_sink_port_default_current = 0;
 
-// static int wireless_charger_port_ready = 0;
+int pd_source_port_default_valtage = 0;
+int pd_source_port_default_current = 0;
+
+char strReleaseDate[16] = {0};
+char strReleaseTime[16] = {0};
 
 // This banner is checked the memmory of MCU platform
 const char NOA_Banner[] = {0xe2, 0x96, 0x88, 0xe2, 0x96, 0x88, 0xe2, 0x96, 0x88, 0x20, 0x20, 0x20, 0x20, 0xe2, 0x96, 0x88, 0xe2, 0x96, 0x88, 0x20, 0x20, 0xe2, 0x96, 0x88, 0xe2, 0x96, 0x88,\
@@ -133,7 +136,12 @@ void Uart_Print_Info() {
 #else
   Serial.printf(" NOA PD STATION Firmware %s\r\n", NOA_ESP32_PD_VERSION);
 #endif
-  Serial.printf(" Building Time %04d%02d%02d%02d%02d%02d\r\n", BUILD_DATE_YEAR_INT,BUILD_DATE_MONTH_INT,BUILD_DATE_DAY_INT,BUILD_TIME_HOURS_INT,BUILD_TIME_MINUTES_INT,BUILD_TIME_SECONDS_INT);
+  memset(strReleaseDate, 0, 16);
+  memset(strReleaseTime, 0, 16);
+  sprintf(strReleaseDate, "%04d%02d%02d", BUILD_DATE_YEAR_INT,BUILD_DATE_MONTH_INT,BUILD_DATE_DAY_INT);
+  sprintf(strReleaseTime, "%02d%02d%02d", BUILD_TIME_HOURS_INT,BUILD_TIME_MINUTES_INT,BUILD_TIME_SECONDS_INT);
+//  Serial.printf(" Building Time %04d%02d%02d%02d%02d%02d\r\n", BUILD_DATE_YEAR_INT,BUILD_DATE_MONTH_INT,BUILD_DATE_DAY_INT,BUILD_TIME_HOURS_INT,BUILD_TIME_MINUTES_INT,BUILD_TIME_SECONDS_INT);
+  Serial.printf(" Building Time %s%s\r\n", strReleaseDate, strReleaseTime);
   Serial.printf(" ESP Chip Model %s Revision %d\r\n", ESP.getChipModel(), ESP.getChipRevision());
   Serial.printf(" ESP Chip Cores %d CPUFrea %luMHz\r\n", ESP.getChipCores(), (unsigned long)ESP.getCpuFreqMHz());
   Serial.printf(" ESP SDK Version %s\r\n", ESP.getSdkVersion());
@@ -162,13 +170,11 @@ static bool bMain_Task = false;
 
 void start_vTask(void * pvParameters) {
   NEO_Pixel_init();   // Init RGB pixel
-  vTaskDelay(2000/portTICK_PERIOD_MS);
+  vTaskDelay(1000/portTICK_PERIOD_MS);
   NOA_App_init();     // Init NOA Main APP
-  vTaskDelay(2000/portTICK_PERIOD_MS);
+  vTaskDelay(1000/portTICK_PERIOD_MS);
   NOA_Net_init();     // Init NOA Net App
-  vTaskDelay(2000/portTICK_PERIOD_MS);
-//  NOA_NFC_init(); // Init NOA NFC App
-//  vTaskDelay(2000/portTICK_PERIOD_MS);
+  vTaskDelay(1000/portTICK_PERIOD_MS);
   bMain_Task = true;
   vTaskDelete(NULL);
 }
@@ -176,8 +182,9 @@ void start_vTask(void * pvParameters) {
 
 void setup() {
   Serial.begin(115200);
-  while(!Serial)
-  delay(100);
+  while(!Serial) {
+    delay(100);
+  }
   Uart_Print_Info();
   NOA_PUB_ESP32DebugInit();
   delay(50);
@@ -196,11 +203,13 @@ void setup() {
   digitalWrite(usb_pd_src1_sel_pin, HIGH);
 
 #ifdef NOA_PD_SNACKER
-//  ncp_bb_con9v_tempadc.attach(ncp_bb_con9v_tempadc_pin);
-//  
-//  pinMode(ncp_bb_con9v_int_pin, INPUT_PULLUP);  // Wireless charger
-//  pinMode(ncp_bb_con9v_led_pin, OUTPUT);
-//  digitalWrite(ncp_bb_con9v_led_pin, HIGH);
+  NOA_SysPara_init();
+  delay(50);
+
+  ncp_bb_con9v_tempadc.attach(ncp_bb_con9v_tempadc_pin);
+  pinMode(ncp_bb_con9v_int_pin, INPUT_PULLUP);  // Wireless charger
+  pinMode(ncp_bb_con9v_led_pin, OUTPUT);
+  digitalWrite(ncp_bb_con9v_led_pin, HIGH);
   
   Wire.begin(26,27);
   Wire.setClock(600000);
@@ -219,7 +228,18 @@ void setup() {
     OM9663_fifo_write_test();
 //    OM9663_fifo_read_test();
   }
- 
+  Main_Task = xTaskCreateStaticPinnedToCore(start_vTask,
+    "startvTask",
+    SIZE_OF_STACK,
+    ( void * ) NULL,
+    tskIDLE_PRIORITY + 1,
+    (StackType_t *const)TaskStackBuffer,
+    (StaticTask_t *const)&TaskTCBBuffer,
+    ARDUINO_RUNNING_CORE);
+  if (Main_Task == NULL || &TaskTCBBuffer == NULL) {
+    DBGLOG(Error, "Create Main_Task fail");
+  }
+
   pd_init(0); // init pd snk
 //  delay(50);
   vTaskDelay(50/portTICK_PERIOD_MS);
@@ -235,17 +255,22 @@ void setup() {
   pinMode(usb_pd_src2_int_pin, INPUT_PULLUP);  // SRC 2
   pinMode(ncp_bb_con2_int_pin, INPUT_PULLUP);
   pinMode(ncp_bb_con2_en_pin, OUTPUT);
-//  digitalWrite(ncp_bb_con2_en_pin, LOW);
+  int cc1 = 0, cc2 = 0;
+  tcpm_get_cc(2, &cc1, &cc2);
+  DBGLOG(Info, "Port %d CC1 %d CC2 %d", 2, cc1, cc2);
+  if (cc1 == 0 && cc2 == 0) {
+    digitalWrite(ncp_bb_con2_en_pin, LOW);  // when port2 cc1 cc2 is open
+  } else {
+    digitalWrite(ncp_bb_con2_en_pin, HIGH);
+  }
 
   pinMode(usb_pd_src2_sel_pin, OUTPUT); // SEL for SRC 2
   digitalWrite(usb_pd_src2_sel_pin, HIGH);
   
   Wire.begin(23,18);  // P1 SNK(C 0), P3 UP SRC(C 2)
-//  Wire.setClock(400000);
   Wire.setClock(600000);
 
   Wire1.begin(21,22); // P2 SRC(C 1) P3 SRC(C 3)
-//  Wire1.setClock(400000);
   Wire1.setClock(600000);
 
   NOA_PUB_I2C_Scanner(0);
@@ -281,15 +306,16 @@ void loop() {
  
   if (pd_sink_port_ready == 1) {
 //    if (wireless_charger_port_ready == 0 && pd_sink_port_default_valtage != 5) {
-//      DBGLOG(Info, "Wireless charger port is ready!");
-//      pinMode(ncp_bb_con9v_en_pin, OUTPUT);
-//      digitalWrite(ncp_bb_con9v_en_pin, HIGH);
-//      vTaskDelay(50/portTICK_PERIOD_MS);
-////      ncp81239_pmic_init(2);
-////      ncp81239_pmic_set_tatus(2);
-////      vTaskDelay(50/portTICK_PERIOD_MS);
-//      wireless_charger_port_ready = 1;
-//    }
+    if (wireless_charger_port_ready == 0) {
+      DBGLOG(Info, "Wireless charger port is ready!");
+      pinMode(ncp_bb_con9v_en_pin, OUTPUT);
+      digitalWrite(ncp_bb_con9v_en_pin, HIGH);
+      vTaskDelay(50/portTICK_PERIOD_MS);
+      ncp81239_pmic_init(2);
+      ncp81239_pmic_set_tatus(2);
+      vTaskDelay(50/portTICK_PERIOD_MS);
+      wireless_charger_port_ready = 1;
+    }
     if (pd_source_port_ready == 0) {
       pd_init(1); // init pd src
       vTaskDelay(50/portTICK_PERIOD_MS);
@@ -302,20 +328,9 @@ void loop() {
 //      NOA_PUB_I2C_PM_RreadAllRegs(0, PM_ADDR);
 //      NOA_PUB_I2C_PD_RreadAllRegs(1, PD_ADDR);
 //      NOA_PUB_I2C_PM_RreadAllRegs(1, PM_ADDR);
-      NOA_PUB_I2C_NFC_RreadAllRegs(1, NFC_ADDR);
+//      NOA_PUB_I2C_NFC_RreadAllRegs(1, NFC_ADDR);
 
       pd_source_port_ready = 1;
-      Main_Task = xTaskCreateStaticPinnedToCore(start_vTask,
-                     "startvTask",
-                     SIZE_OF_STACK,
-                     ( void * ) NULL,
-                     tskIDLE_PRIORITY + 1,
-                     (StackType_t *const)TaskStackBuffer,
-                     (StaticTask_t *const)&TaskTCBBuffer,
-                     ARDUINO_RUNNING_CORE);
-     if (Main_Task == NULL || &TaskTCBBuffer == NULL) {
-       DBGLOG(Error, "Create Main_Task fail");
-     }
     } else {
       if (LOW == digitalRead(usb_pd_src1_int_pin)) {
         tcpc_alert(1);
@@ -323,25 +338,55 @@ void loop() {
       }
       pd_run_state_machine(1, 0);
     }
+    if (HIGH == digitalRead(ncp_bb_con1_int_pin)) {
+//      DBGLOG(Info, "PM 1 init pin HIGH");
+    } else {
+//      DBGLOG(Info, "PM 1 init pin LOW");
+    }
+    
+    if (HIGH == digitalRead(ncp_bb_con9v_int_pin)) {
+//      DBGLOG(Info, "PM wireless init pin HIGH");
+    } else {
+//      DBGLOG(Info, "PM wireless init pin LOW");
+    }
 
     if (bMain_Task == true) {
       nTime_new = millis()/1000;
       if (nTime_new != nTime_old) {
+        NOA_PUB_MSG msg;
         nTime_old = nTime_new;
         NFC_Status_new = radio_mifare1K_dump_minimal();
         if (NFC_Status_new != NFC_Status_old) {
           NFC_Status_old = NFC_Status_new;
-          NOA_PUB_MSG msg;
           memset(&msg, 0, sizeof(NOA_PUB_MSG));
           if (NFC_Status_old == true) {
             msg.message = NFC_MSG_READY;
           } else {
             msg.message = NFC_MSG_NOTREADY;
+            NOA_Parametr_Set(60, (char *)"-");
+            NOA_Parametr_Set(61, (char *)"-");
+            NOA_Parametr_Set(62, (char *)"-");
+            NOA_Parametr_Set(63, (char *)"-");
+            NOA_Parametr_Set(64, (char *)"-");
           }
           if (NOA_APP_TASKQUEUE != NULL) {
             xQueueSend(NOA_APP_TASKQUEUE, (void *)&msg, (TickType_t)0);
           }
         }
+        memset(&msg, 0, sizeof(NOA_PUB_MSG));
+        if (wireless_charger_port_ready == 1) {
+          msg.message = APP_MSG_WIRELESSREADY;
+        } else {
+          msg.message = APP_MSG_WIRELESSNOTREADY;
+        }
+        if (NOA_APP_TASKQUEUE != NULL) {
+          xQueueSend(NOA_APP_TASKQUEUE, (void *)&msg, (TickType_t)0);
+        }
+//        DBGLOG(Info, "Temperrature = %d %lu", ncp_bb_con9v_tempadc.readMiliVolts(), ncp_bb_con9v_tempadc.readVoltage());
+//        ncp81239_pmic_get_tatus(1);
+//        ncp81239_pmic_get_tatus(2);
+//       analogReadResolution(12);
+//       DBGLOG(Info, "Temperrature = %d", analogRead(ncp_bb_con9v_tempadc_pin));
       }
     }
   }
@@ -414,10 +459,11 @@ void loop() {
 
 void pd_process_source_cap_callback(int port, int cnt, uint32_t *src_caps)
 {
-  DBGLOG(Info, "Port %d HIGH cnt %d", port, cnt);
+  DBGLOG(Info, "Port %d HIGH cnt %d %04X: %d mv %d ma", port, cnt, *src_caps, ((*src_caps >> 10) & 0x3ff) * 50, (*src_caps & 0x3ff) * 10);
   if (port == 0) {
     pd_sink_port_ready = 1;
     pd_source_cap_max_index = cnt - 1;
-    pd_sink_port_default_valtage = *src_caps;
+    pd_sink_port_default_valtage = ((*src_caps >> 10) & 0x3ff) * 50;
+    pd_sink_port_default_current = (*src_caps & 0x3ff) * 10;
   }
 }

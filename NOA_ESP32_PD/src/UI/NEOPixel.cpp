@@ -57,7 +57,7 @@ void RGB_Light_Test_Task_Loop( void * pvParameters ){
 //  theaterChaseRainbow(50);
 //  NEO_Pixel_Clear();
   
-  DBGLOG(Info, "RGB_Light_Task_Loop Exit from core %d", xPortGetCoreID());
+  DBGLOG(Info, "RGB_Light_Test_Task_Loop Exit from core %d", xPortGetCoreID());
 
 //  uint32_t msg = 0;
 //  msg = RGB_MSG_READY;
@@ -128,7 +128,7 @@ void RGB_Light_Task_Loop( void * pvParameters ){
         nStatus[1] = 0; 
         break;
       case APP_MSG_WIRELESSREADY:
-        nStatus[2] = 1;
+        nStatus[2] = 3; // default is 9V
         break;
       case APP_MSG_WIRELESSNOTREADY:
         nStatus[2] = 0;
